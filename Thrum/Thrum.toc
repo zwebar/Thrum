@@ -1,0 +1,18 @@
+## Interface: 16001
+## Title: Thrum |cff7fc8ff- Shaman totem HUD|r
+## Notes: A carved, elemental HUD for shamans: a stone mana trough, totem plaques with real timers, shocks, Lightning Shield, imbues and procs.
+## Version: 1.0.0
+## IconTexture: Interface\Icons\Spell_Nature_StoneSkinTotem
+## SavedVariables: ThrumDB
+## SavedVariablesPerCharacter: ThrumCharDB
+
+Core.lua
+Game.lua
+FX.lua
+HUD.lua
+Timers.lua
+Totems.lua
+Spells.lua
+Tracker.lua
+Demo.lua
+Options.lua
