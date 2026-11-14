@@ -12,6 +12,8 @@ local function Pixels(v) return string.format("%d", math.floor(v + 0.5)) end
 -- What to do when a setting changes (the rest are read live).
 local APPLY = {
     scale = function() if H.built then H.HUD:ApplyPosition() end end,
+    x = function() if H.built then H.HUD:ApplyPosition() end end,
+    y = function() if H.built then H.HUD:ApplyPosition() end end,
     locked = function() if H.built then H.HUD:ApplyLock() end end,
     totems = function() if H.built then H.HUD:ApplyOptions() end end,
     imbue = function() if H.built then H.HUD:ApplyOptions() end end,
@@ -50,11 +52,23 @@ function O:Build()
         end
     end
 
-    Header("HUD")
-    Checkbox("locked", "Lock the HUD", "Untick to drag the HUD somewhere else, then tick again.")
+    Header("Position")
+    Checkbox("locked", "Lock the HUD", "Untick to drag the HUD somewhere else, then tick again. You can also drag it "
+        .. "while Blizzard's Edit Mode is open (Esc > Edit Mode).")
+    Slider("x", "Across", "How far left or right of the screen's centre the HUD sits.",
+        -H.HUD_X_RANGE, H.HUD_X_RANGE, 1, Pixels)
+    Slider("y", "Up and down", "How far above or below the screen's centre the HUD sits.",
+        -H.HUD_Y_RANGE, H.HUD_Y_RANGE, 1, Pixels)
     Slider("scale", "Size", "How big the HUD is.", 0.5, 2.5, 0.05, Times)
-    Slider("idle", "Opacity when idle", "How visible the HUD is out of combat with nothing going on. 0% hides it.",
-        0, 1, 0.05, Percent)
+    Button("Position", "Reset", "Puts the HUD back in its default spot and size.", function()
+        SlashCmdList["THRUM"]("reset")
+    end)
+
+    Header("HUD")
+    Checkbox("combatOnly", "Only in combat", "Hide the HUD out of combat. It still shows while unlocked, in Edit "
+        .. "Mode and during the demo.")
+    Slider("idle", "Opacity out of combat", "When \"Only in combat\" is off: how visible the HUD is out of combat "
+        .. "with nothing going on. 0% hides it.", 0, 1, 0.05, Percent)
     Checkbox("totems", "Totem plaques", "Your four totems above the mana trough, with the time left on each.")
     Checkbox("imbue", "Weapon imbue badge", "Your weapon imbue and the minutes left on it, left of the totems.")
     Checkbox("fsr", "Five-second rule", "A thin line under the mana trough that runs out five seconds after you spend "
@@ -77,10 +91,6 @@ function O:Build()
         H.Build()
         H.Demo:Run()
     end)
-    Button("Position", "Reset", "Puts the HUD back in its default spot and size.", function()
-        SlashCmdList["THRUM"]("reset")
-    end)
-
     Settings.RegisterAddOnCategory(cat)
     self.category = cat
 end

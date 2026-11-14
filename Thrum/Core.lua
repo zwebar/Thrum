@@ -42,7 +42,8 @@ local DEFAULTS = {
     x = 0, y = -190,   -- offset from the centre of the screen
     scale = 1,
     locked = true,
-    idle = 0.35,       -- HUD opacity when nothing is going on
+    combatOnly = true, -- hidden out of combat (shown while unlocked, in Edit Mode and in the demo)
+    idle = 0.35,       -- HUD opacity out of combat with nothing going on, when combatOnly is off
     fx = 1,            -- size of the word bursts
     words = true,      -- word bursts for your spells
     hits = true,       -- CRIT! / RESISTED! from what happens to the target
@@ -54,6 +55,8 @@ local DEFAULTS = {
     imbue = true,      -- the weapon imbue badge
 }
 H.DEFAULTS = DEFAULTS
+-- the position range the options page offers (offsets from the screen's centre)
+H.HUD_X_RANGE, H.HUD_Y_RANGE = 1000, 600
 
 -- Some values are hidden from addons in combat ("secret"): they can be handed to widgets,
 -- but any maths or comparison on them is an error. Everything that reads the game checks first.
@@ -235,6 +238,7 @@ end)
 -- /thrum
 --------------------------------------------------------------------------------
 local TOGGLES = {
+    combatOnly = "only in combat",
     words = "spell words", hits = "crit/resist words", prompt = "SHOCK IT! prompt", totems = "totem plaques",
     fsr = "five-second-rule line", castbar = "cast bar", procs = "proc words", imbue = "weapon imbue badge",
 }
@@ -290,7 +294,21 @@ SlashCmdList["THRUM"] = function(msg)
         else
             H.Print("fx takes a number from 0.5 (small bursts) to 1.5")
         end
-    elseif TOGGLES[cmd] then
+    elseif cmd == "combat" then
+        Toggle("combatOnly")
+    elseif cmd == "pos" or cmd == "position" then
+        local x, y = arg:match("^(%-?%d+)%s+(%-?%d+)$")
+        if x then
+            H.db.x, H.db.y = tonumber(x), tonumber(y)
+            if H.built then
+                H.db.x, H.db.y = H.HUD.ClampX(H.db.x), H.HUD.ClampY(H.db.y)
+                H.HUD:ApplyPosition()
+            end
+            H.Print("position " .. H.db.x .. ", " .. H.db.y)
+        else
+            H.Print("pos takes two numbers: across and up from the centre of the screen, e.g. /thrum pos 0 -190")
+        end
+    elseif TOGGLES[cmd] and cmd ~= "combatOnly" then
         Toggle(cmd)
     elseif cmd == "reset" then
         H.db.x, H.db.y, H.db.scale = DEFAULTS.x, DEFAULTS.y, DEFAULTS.scale
@@ -300,7 +318,8 @@ SlashCmdList["THRUM"] = function(msg)
         H.Print("commands (or Options > AddOns > Thrum):")
         H.Print("  /thrum options - open the options page")
         H.Print("  /thrum test - play a demo of every effect")
-        H.Print("  /thrum unlock | lock - move the HUD")
+        H.Print("  /thrum unlock | lock - move the HUD (or drag it in Edit Mode)   /thrum pos 0 -190 - place it exactly")
+        H.Print("  /thrum combat - toggle showing the HUD only in combat")
         H.Print("  /thrum scale 1.2 - resize   /thrum idle 0.35 - opacity out of combat")
         H.Print("  /thrum fx 0.8 - size of the word bursts")
         H.Print("  /thrum words | hits | prompt | procs - toggle spell words, CRIT!/RESISTED!, SHOCK IT!, proc words")

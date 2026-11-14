@@ -48,7 +48,8 @@ screenshots; the grey squares in the plaques, boxes and cast bar are where the s
   right and a little above the HUD: never over the middle of the screen or the unit frames.
 - **Hits** (solo only): `CRIT!` with the number, `RESISTED!`, `DODGED!`, `IMMUNE!`..., and
   `SLAIN!` when the target drops.
-- Fades when nothing is going on.
+- Hidden out of combat (it appears the moment a fight starts). Turn **Only in combat** off to
+  keep it on screen, faded when nothing is going on.
 
 In a group, anything the game cannot pin on you (whose crit, whose kill, whose dispel, an
 interrupt with no name on it) is left out rather than guessed.
@@ -60,19 +61,26 @@ game. It only runs on shamans.
 
 ## Options
 
-**Options > AddOns > Thrum** has the settings: lock and size the HUD, idle opacity, the totem
-plaques, the imbue badge, the five-second line, the cast bar, the spell words and their size,
+**Options > AddOns > Thrum** has the settings: where the HUD sits (across and up from the
+screen's centre, or unlock it and drag), its size, whether it shows only in combat and how faded it
+is otherwise, the totem plaques, the imbue badge, the five-second line, the cast bar, the spell words and their size,
 procs, `CRIT!`/`RESISTED!`, the `SHOCK IT!` cast bar, and buttons to play the demo or reset the
 position. `/thrum options` opens it.
+
+The HUD also joins Blizzard's **Edit Mode** (Esc > Edit Mode): while Edit Mode is open the HUD
+shows with a highlight, in or out of combat, and you can drag it into place with the rest of
+your UI. Its position is Thrum's own setting, so it is the same in every Edit Mode layout.
 
 ## Commands
 
 | | |
 |---|---|
 | `/thrum test` | play a 15-second pretend fight, to see every effect |
-| `/thrum unlock` / `lock` | drag the HUD somewhere else |
+| `/thrum unlock` / `lock` | drag the HUD somewhere else (or drag it in Edit Mode) |
+| `/thrum pos 0 -190` | place it exactly: across and up from the centre of the screen |
+| `/thrum combat` | toggle showing the HUD only in combat |
 | `/thrum scale 1.2` | resize (0.5 – 2.5) |
-| `/thrum idle 0.35` | opacity when nothing is happening (0 hides it) |
+| `/thrum idle 0.35` | opacity out of combat with nothing happening, when only-in-combat is off |
 | `/thrum fx 0.8` | size of the word bursts (0.5 – 1.5) |
 | `/thrum words` | toggle the spell words |
 | `/thrum hits` | toggle `CRIT!` / `RESISTED!` |
@@ -127,7 +135,8 @@ Thrum is built on the architecture of Kapow, a comic-style rogue HUD.
   (falling back to Chronicle's copy): it checks that every widget method, global and event the
   addon uses exists in the client and accepts what it is given, then plays a fight with
   everything readable and again with mana, auras, cooldowns and totems secret, a grouped fight,
-  enemy casts, mana regeneration, every slash command and the options page, and asserts what
+  enemy casts, mana regeneration, hiding out of combat and Edit Mode, every slash command and
+  the options page, and asserts what
   should show. It needs `fengari-web.js` (default `../chronicle/emulator/vendor`; `--fengari`
   to override). `--snap out.html` also paints what the HUD looks like at moments of the demo.
 - The README images: `node tools/test.js --showcase tools/.preview/show/index.html`, then

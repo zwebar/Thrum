@@ -169,6 +169,7 @@ function IMPL.SetShown(self, s)
     self.__shown = s
 end
 function IMPL.IsShown(self) return self.__shown end
+function IMPL.EnableMouse(self, on) self.__v.MouseEnabled = { on and true or false } end
 function IMPL.CreateTexture(self, name, layer, template, sub)
     if layer and not LAYERS[layer] then error("bad draw layer " .. tostring(layer), 2) end
     if sub and (type(sub) ~= "number" or sub < -8 or sub > 7) then error("bad sublevel " .. tostring(sub), 2) end
@@ -584,6 +585,20 @@ local function setup()
     end)
     -- used by Blizzard's own UI code in this client, though missing from the generated docs
     IsInGroup = function() return G.grouped end
+    -- Blizzard's Edit Mode (Lua in the client, Blizzard_EditMode\Shared\EditModeManager.lua):
+    -- it fires EventRegistry callbacks "EditMode.Enter" and "EditMode.Exit".
+    local callbacks = {}
+    EventRegistry = {
+        RegisterCallback = function(self, event, fn, owner)
+            if type(event) ~= "string" or type(fn) ~= "function" then error("RegisterCallback(event, fn, owner)", 2) end
+            callbacks[event] = callbacks[event] or {}
+            table.insert(callbacks[event], fn)
+        end,
+        TriggerEvent = function(self, event, ...)
+            for _, fn in ipairs(callbacks[event] or {}) do fn(nil, ...) end
+        end,
+    }
+    EditModeManagerFrame = { IsEditModeActive = function() return G.editMode or false end }
     define("UnitGUID", function(unit) return unit == "player" and "Player-1-0001" or hide("Creature-0-1") end)
     define("UnitExists", function() return G.target end)
     define("UnitCanAttack", function() return G.target end)
@@ -1288,11 +1303,18 @@ local function options()
     end
     say("  " .. cat.name .. ": " .. table.concat(items, ", "))
     local S = SETTINGS.settings
-    for _, key in ipairs({ "locked", "scale", "idle", "totems", "imbue", "fsr", "castbar", "words", "fx", "procs", "hits", "prompt" }) do
+    for _, key in ipairs({ "locked", "x", "y", "combatOnly", "scale", "idle", "totems", "imbue", "fsr", "castbar", "words", "fx", "procs", "hits", "prompt" }) do
         if not S[key] then fail("no setting for " .. key) end
     end
     S.scale:SetValue(1.4)
     if ThrumHUD.__scale ~= 1.4 then fail("Size did not resize the HUD") end
+    S.x:SetValue(-300)
+    S.y:SetValue(150)
+    local p = ThrumHUD.__points[1]
+    if not (p and p.x == -300 and p.y == 150) then fail("Across / Up and down did not move the HUD") end
+    S.combatOnly:SetValue(false)
+    if ThrumDB.combatOnly ~= false then fail("Only in combat did not change the saved setting") end
+    S.combatOnly:SetValue(true)
     S.locked:SetValue(false)
     if not H.HUD.mover.__shown then fail("unlocking did not show the mover") end
     S.locked:SetValue(true)
@@ -1324,6 +1346,65 @@ local function options()
     if not H.demo then fail("Play demo did not start the demo") end
     step(16)
     say("  every setting applied")
+    for _, l in ipairs(LOG) do say(l) end
+end
+
+-- Out of combat the HUD hides; Edit Mode shows it and lets it be dragged.
+local function placing()
+    say("")
+    say("--- out of combat, and Edit Mode (expect: hidden out of combat, shown and draggable in Edit Mode) ---")
+    LOG = {}
+    t0 = clock
+    local root = ThrumHUD
+    local function alpha() return root.__v.Alpha and real(root.__v.Alpha[1]) or 1 end
+    G.combat, G.target = false, false
+    fire("PLAYER_TARGET_CHANGED")
+    fire("PLAYER_REGEN_ENABLED")
+    step(1.5)
+    say(string.format("  out of combat: alpha %.2f", alpha()))
+    if alpha() > 0.01 then fail("HUD not hidden out of combat (alpha " .. alpha() .. ")") end
+    G.combat = true
+    fire("PLAYER_REGEN_DISABLED")
+    step(0.2)
+    say(string.format("  0.2s into combat: alpha %.2f", alpha()))
+    if alpha() < 0.99 then fail("HUD not shown straight away in combat (alpha " .. alpha() .. ")") end
+    G.combat = false
+    fire("PLAYER_REGEN_ENABLED")
+    step(1)
+    log("(Edit Mode opens)")
+    G.editMode = true
+    EventRegistry:TriggerEvent("EditMode.Enter")
+    step(0.3)
+    if alpha() < 0.99 then fail("HUD hidden in Edit Mode") end
+    if not (H.HUD.mover.__shown and root.__v.MouseEnabled and root.__v.MouseEnabled[1]) then
+        fail("HUD cannot be dragged in Edit Mode")
+    end
+    say("  Edit Mode: shown, highlighted, mouse on: " .. tostring(H.HUD.mover.__shown))
+    call("OnDragStart", root.__scripts.OnDragStart, root)
+    call("OnDragStop", root.__scripts.OnDragStop, root)
+    log("(Edit Mode closes)")
+    G.editMode = false
+    EventRegistry:TriggerEvent("EditMode.Exit")
+    step(1.5)
+    if H.HUD.mover.__shown or (root.__v.MouseEnabled and root.__v.MouseEnabled[1]) then
+        fail("Edit Mode mover stayed after Edit Mode closed")
+    end
+    if alpha() > 0.01 then fail("HUD not hidden again after Edit Mode") end
+    log("(only in combat off: idle opacity once mana is full)")
+    mana(G.maxMana)
+    slash("combat")
+    step(2)
+    say(string.format("  only in combat off, idle: alpha %.2f", alpha()))
+    if math.abs(alpha() - 0.35) > 0.02 then fail("idle opacity not used with only-in-combat off") end
+    slash("combat")
+    slash("pos 120 -200")
+    if ThrumDB.x ~= 120 or ThrumDB.y ~= -200 then fail("/thrum pos did not move the HUD") end
+    local p = root.__points[1]
+    if not (p and p.x == 120 and p.y == -200) then fail("/thrum pos did not reposition the frame") end
+    slash("pos 9999 -9999")
+    if ThrumDB.x ~= 1000 or ThrumDB.y ~= -600 then fail("/thrum pos not kept within range: " .. ThrumDB.x .. ", " .. ThrumDB.y) end
+    slash("pos left")
+    slash("reset")
     for _, l in ipairs(LOG) do say(l) end
 end
 
@@ -1543,6 +1624,7 @@ fight("fight, mana, auras, cooldowns and totems secret in combat", true)
 grouped()
 casts()
 regen()
+placing()
 commands()
 options()
 local counts = string.format("%d frames, %d textures, %d font strings", COUNT.frames, COUNT.textures, COUNT.fontstrings)

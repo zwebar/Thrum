@@ -305,22 +305,31 @@ function HUD:Build()
     prompt:Hide()
     self.prompt = prompt
 
-    -- Mover, shown while unlocked
+    -- Mover, shown while unlocked or while Blizzard's Edit Mode is open
     local mover = CreateFrame("Frame", nil, root)
     mover:SetAllPoints(root)
     mover:SetFrameLevel(base + 40)
     mover.bg = mover:CreateTexture(nil, "BACKGROUND")
     mover.bg:SetAllPoints()
     mover.bg:SetColorTexture(C.storm[1], C.storm[2], C.storm[3], 0.16)
+    mover.edges = {}
+    for i, side in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" },
+        { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+        local e = mover:CreateTexture(nil, "BORDER")
+        e:SetColorTexture(C.storm[1], C.storm[2], C.storm[3], 0.8)
+        e:SetPoint(side[1])
+        e:SetPoint(side[2])
+        if i <= 2 then e:SetHeight(2) else e:SetWidth(2) end
+        mover.edges[i] = e
+    end
     mover.text = H.Text(mover, "OVERLAY", 13, "OUTLINE")
     mover.text:SetPoint("TOP", 0, -4)
-    mover.text:SetText("Thrum - drag me, then /thrum lock")
     mover:Hide()
     self.mover = mover
 
     root:RegisterForDrag("LeftButton")
     root:SetScript("OnDragStart", function(f)
-        if not H.db.locked then f:StartMoving() end
+        if not H.db.locked or HUD.editing then f:StartMoving() end
     end)
     root:SetScript("OnDragStop", function(f)
         f:StopMovingOrSizing()
@@ -328,10 +337,11 @@ function HUD:Build()
         local ux, uy = UIParent:GetCenter()
         local s = f:GetScale()
         if cx and ux and s and s > 0 then
-            H.db.x = math.floor(cx - ux / s + 0.5)
-            H.db.y = math.floor(cy - uy / s + 0.5)
+            H.db.x = HUD.ClampX(math.floor(cx - ux / s + 0.5))
+            H.db.y = HUD.ClampY(math.floor(cy - uy / s + 0.5))
         end
         HUD:ApplyPosition()
+        if H.Options.Refresh then H.Options:Refresh() end
     end)
 
     self.alpha = 1
@@ -339,6 +349,7 @@ function HUD:Build()
     self:ApplyPosition()
     self:ApplyLock()
     self:ApplyOptions()
+    self:HookEditMode()
 
     H.Every(function(dt, now) HUD:OnUpdate(dt, now) end)
 end
@@ -346,14 +357,39 @@ end
 function HUD:ApplyPosition()
     local root = self.root
     root:SetScale(H.db.scale or 1)
+    H.db.x, H.db.y = HUD.ClampX(H.db.x or 0), HUD.ClampY(H.db.y or -190)
     root:ClearAllPoints()
     root:SetPoint("CENTER", UIParent, "CENTER", H.db.x or 0, H.db.y or -190)
 end
 
+-- Positions stay within what the options page's sliders offer.
+function HUD.ClampX(x) return math.max(-H.HUD_X_RANGE, math.min(H.HUD_X_RANGE, x)) end
+function HUD.ClampY(y) return math.max(-H.HUD_Y_RANGE, math.min(H.HUD_Y_RANGE, y)) end
+
 function HUD:ApplyLock()
-    local unlocked = not H.db.locked
-    self.root:EnableMouse(unlocked)
-    self.mover:SetShown(unlocked)
+    local movable = not H.db.locked or self.editing == true
+    self.root:EnableMouse(movable)
+    self.mover:SetShown(movable)
+    self.mover.text:SetText(self.editing and "Thrum" or "Thrum - drag me, then /thrum lock")
+end
+
+-- Blizzard's Edit Mode opened or closed: while it is open the HUD shows (in or out of combat)
+-- with a highlight, and can be dragged like Blizzard's own frames.
+function HUD:SetEditing(on)
+    self.editing = on and true or false
+    self:ApplyLock()
+end
+
+-- Joins Edit Mode through the callbacks Blizzard's Edit Mode fires for the frames it moves.
+function HUD:HookEditMode()
+    if self.editHooked or not (EventRegistry and EventRegistry.RegisterCallback) then return end
+    self.editHooked = true
+    EventRegistry:RegisterCallback("EditMode.Enter", function() HUD:SetEditing(true) end, HUD)
+    EventRegistry:RegisterCallback("EditMode.Exit", function() HUD:SetEditing(false) end, HUD)
+    local manager = EditModeManagerFrame
+    if manager and manager.IsEditModeActive and H.Safe(manager.IsEditModeActive, manager) then
+        self:SetEditing(true)
+    end
 end
 
 -- The parts that can be switched off.
@@ -776,12 +812,22 @@ function HUD:OnUpdate(dt, now)
         self:ImbueText(now)
     end
 
-    -- fade when idle
-    local busy = H.demo or self.inCombat or self.hasTarget or not H.db.locked or self.casting
-        or self.full == false or (H.Timers.count or 0) > 0 or (H.Totems.count or 0) > 0
-    local target = busy and 1 or (H.db.idle or 0.35)
+    -- Out of combat: hidden (the default), or faded to the idle opacity when nothing is going on.
+    -- Always shown in the demo, while unlocked and while Edit Mode is open.
+    local showing = H.demo or self.editing or not H.db.locked
+    local target
+    if showing or self.inCombat then
+        target = 1
+    elseif H.db.combatOnly ~= false then
+        target = 0
+    else
+        local busy = self.hasTarget or self.casting or self.full == false
+            or (H.Timers.count or 0) > 0 or (H.Totems.count or 0) > 0
+        target = busy and 1 or (H.db.idle or 0.35)
+    end
     if self.alpha ~= target then
-        local step = dt * 3
+        -- in quickly when a fight starts, out gently after
+        local step = dt * (target > self.alpha and 8 or 2)
         if self.alpha < target then
             self.alpha = math.min(target, self.alpha + step)
         else
